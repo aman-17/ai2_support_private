@@ -31,3 +31,5 @@ print(f"Generated: {generated_text}")
 import torch.distributed as dist
 if dist.is_initialized():
     dist.destroy_process_group()
+
+# {'vllm': '23 years old and I live in the United States. I am a student at'}

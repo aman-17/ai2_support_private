@@ -3,6 +3,9 @@ from hf_olmo import *
 from vllm import SamplingParams, LLM
 from vllm.model_executor.utils import set_random_seed
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from vllm import ModelRegistry, LLM, SamplingParams
+from olmo_new import OlmoNewForCausalLM
+
 
 def compare_vllm_with_hf(path: str, prompt: str = "My name is John! I am ", which: str = "both"):
 
@@ -12,6 +15,7 @@ def compare_vllm_with_hf(path: str, prompt: str = "My name is John! I am ", whic
 
     # VLLM
     if which in ["vllm", "both"]:
+        ModelRegistry.register_model("OlmoNewForCausalLM", OlmoNewForCausalLM)
         s = SamplingParams(temperature=0.0)
         llm = LLM(model=path, trust_remote_code=True, gpu_memory_utilization=0.90)
 

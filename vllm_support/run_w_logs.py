@@ -8,21 +8,18 @@ import os
 def inspect_checkpoint(checkpoint_path):
     """Inspect the checkpoint contents"""
     print(f"\nInspecting checkpoint at: {checkpoint_path}")
-    
-    # List files in checkpoint directory
+
     print("\nFiles in checkpoint directory:")
     for file in os.listdir(checkpoint_path):
         print(f"  - {file}")
     
     try:
-        # Try to load with transformers
         print("\nTrying to load with transformers...")
         model = AutoModelForCausalLM.from_pretrained(
             checkpoint_path,
             trust_remote_code=True
         )
         
-        # Print state dict keys
         print("\nModel state dict keys:")
         for key in model.state_dict().keys():
             print(f"  - {key}")
@@ -31,7 +28,6 @@ def inspect_checkpoint(checkpoint_path):
         print(f"Error loading with transformers: {str(e)}")
         
     try:
-        # Try to load pytorch checkpoint directly if there's a .bin or .pt file
         pt_files = [f for f in os.listdir(checkpoint_path) if f.endswith(('.bin', '.pt'))]
         if pt_files:
             print(f"\nLoading PyTorch checkpoint: {pt_files[0]}")
@@ -48,12 +44,10 @@ def inspect_checkpoint(checkpoint_path):
     except Exception as e:
         print(f"Error loading PyTorch checkpoint: {str(e)}")
 
-# Inspect checkpoint before trying to load with vLLM
 checkpoint_path = "model-checkpoints/peteish7/step11931-unsharded-hf/"
 inspect_checkpoint(checkpoint_path)
 
-# Now proceed with your original code
-# ModelRegistry.register_model("OlmoNewForCausalLM", OlmoNewForCausalLM)
+ModelRegistry.register_model("OlmoNewForCausalLM", OlmoNewForCausalLM)
 sampling_params = SamplingParams(temperature=0.0)
 
 try:

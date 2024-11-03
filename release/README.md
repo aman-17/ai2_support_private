@@ -1,15 +1,16 @@
 # olmo-release-processes
 Scripts and notes for releasing data and models
 ```bash
+git clone https://github.com/allenai/OLMo.git
 pip3 install ai2-olmo datasets wandb 
 ```
 
 ## Unsharding:
 ```bash
-export OLMO_DIR="/root/program/OLMo"
+export OLMO_DIR="/ai2_support_private/release/OLMo"
 export LOCAL_CHECKPOINT_DIR="/weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7"
 export DEST_DIR="/weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7"
-export LOGS_DIR="/root/program/logs"
+export LOGS_DIR="/ai2_support_private/release/logs"
 export TEMP_DIR="/weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7/temp"
 mkdir -p $LOGS_DIR
 ```

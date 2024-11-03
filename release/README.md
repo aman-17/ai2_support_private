@@ -1,5 +1,8 @@
 # olmo-release-processes
 Scripts and notes for releasing data and models
+```bash
+pip3 install ai2-olmo datasets wandb 
+```
 
 ## Unsharding:
 ```bash
@@ -11,8 +14,8 @@ export TEMP_DIR="/weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/petei
 mkdir -p $LOGS_DIR
 ```
 
+Number of checkpoints are in your directory:
 ```bash
-<!-- how many checkpoints are in your directory -->
 ls $LOCAL_CHECKPOINT_DIR | grep -Eo 'step[0-9]+' | wc -l
 ```
 

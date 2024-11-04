@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from vllm import SamplingParams, LLM, ModelRegistry
 from hf_olmo import *
 from olmo_new import OlmoNewForCausalLM
+import sys
 
 @dataclass
 class ModelConfig:
@@ -55,7 +56,7 @@ class ModelOutputGen:
         use_norm_reordering: str = "true"
     ) -> Dict[str, str]:
         """
-        Compare outputs between old and new VLLM models.
+        Generaate outputs between old and new VLLM models.
         
         Args:
             model_path: Path to the model checkpoint
@@ -79,9 +80,6 @@ class ModelOutputGen:
         return outputs
 
 def main():
-    """Main entry point for the script."""
-    import sys
-    
     try:
         if len(sys.argv) < 2:
             raise ValueError("Model path argument is required")
@@ -97,7 +95,6 @@ def main():
             )
             
         print("\nResults:", results)
-        
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)

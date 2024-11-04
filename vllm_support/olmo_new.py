@@ -403,10 +403,10 @@ class OlmoNewForCausalLM(nn.Module):
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
         mapper = self._create_map()
-        print("mapper", mapper)
-        print("\nWeight mapping:")
-        for old_name, new_name in mapper.items():
-            print(f"  {old_name} -> {new_name}")
+        # print("mapper", mapper)
+        # print("\nWeight mapping:")
+        # for old_name, new_name in mapper.items():
+        #     print(f"  {old_name} -> {new_name}")
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)
             ("qkv_proj", "q_proj", "q"),

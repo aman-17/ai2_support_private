@@ -1,0 +1,4 @@
+huggingface_hub[cli]
+ai2-olmo>=v0.2.3
+cached_path
+safetensors

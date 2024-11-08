@@ -110,72 +110,72 @@
 # generated_text = processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 # print("\nGenerated text:", generated_text)
 
-# from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
-# from PIL import Image
-# import requests
-# import torch
+from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from PIL import Image
+import requests
+import torch
 
-# processor = AutoProcessor.from_pretrained(
-#     'allenai/MolmoE-1B-0924',
-#     trust_remote_code=True,
-#     torch_dtype=torch.bfloat16,
-#     device_map='auto'
-# )
-# model = AutoModelForCausalLM.from_pretrained(
-#     'allenai/MolmoE-1B-0924',
-#     trust_remote_code=True,
-#     torch_dtype=torch.bfloat16,
-#     device_map='auto'
-# )
+processor = AutoProcessor.from_pretrained(
+    'allenai/MolmoE-1B-0924',
+    trust_remote_code=True,
+    torch_dtype=torch.bfloat16,
+    device_map='auto'
+)
+model = AutoModelForCausalLM.from_pretrained(
+    'allenai/MolmoE-1B-0924',
+    trust_remote_code=True,
+    torch_dtype=torch.bfloat16,
+    device_map='auto'
+)
 
-# image = Image.open(requests.get("https://picsum.photos/id/237/536/354", stream=True).raw)
-# print("\nOriginal image size:", image.size)
+image = Image.open(requests.get("https://picsum.photos/id/237/536/354", stream=True).raw)
+print("\nOriginal image size:", image.size)
 
-# image = image.convert('RGB')
-# inputs = processor.process(
-#     images=[image],
-#     text="Describe this image."
-# )
-# print("\nTensor shapes before processing:")
-# for key, value in inputs.items():
-#     if torch.is_tensor(value):
-#         print(f"{key}: {value.shape}")
-# processed_inputs = {}
-# for k, v in inputs.items():
-#     if not torch.is_tensor(v):
-#         processed_inputs[k] = v
-#         continue
+image = image.convert('RGB')
+inputs = processor.process(
+    images=[image],
+    text="Describe this image."
+)
+print("\nTensor shapes before processing:")
+for key, value in inputs.items():
+    if torch.is_tensor(value):
+        print(f"{key}: {value.shape}")
+processed_inputs = {}
+for k, v in inputs.items():
+    if not torch.is_tensor(v):
+        processed_inputs[k] = v
+        continue
     
-#     # Original processor's image tensor but convert to bfloat16
-#     if k == 'images':
-#         print(f"\nImage tensor stats before conversion:")
-#         print(f"Shape: {v.shape}")
-#         print(f"Range: [{v.min().item():.3f}, {v.max().item():.3f}]")
-#         processed_inputs[k] = v.to(torch.bfloat16).to(model.device).unsqueeze(0)
-#     elif k == 'image_masks':
-#         processed_inputs[k] = v.to(torch.bfloat16).to(model.device).unsqueeze(0)
-#     elif v.dtype in [torch.int32, torch.int64]:
-#         processed_inputs[k] = v.to(model.device).unsqueeze(0)
-#     else:
-#         processed_inputs[k] = v.to(model.device).unsqueeze(0)
-# print("\nTensor shapes and dtypes after processing:")
-# for key, value in processed_inputs.items():
-#     if torch.is_tensor(value):
-#         print(f"{key}:")
-#         print(f"  Shape: {value.shape}")
-#         print(f"  Dtype: {value.dtype}")
-#         if key == 'images':
-#             print(f"  Range: [{value.min().item():.3f}, {value.max().item():.3f}]")
-# output = model.generate_from_batch(
-#     processed_inputs,
-#     GenerationConfig(max_new_tokens=200, stop_strings="<|endoftext|>"),
-#     tokenizer=processor.tokenizer
-# )
-# generated_tokens = output[0,processed_inputs['input_ids'].size(1):]
-# generated_text = processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
-# print("\nGenerated text:", generated_text)
+    # Original processor's image tensor but convert to bfloat16
+    if k == 'images':
+        print(f"\nImage tensor stats before conversion:")
+        print(f"Shape: {v.shape}")
+        print(f"Range: [{v.min().item():.3f}, {v.max().item():.3f}]")
+        processed_inputs[k] = v.to(torch.bfloat16).to(model.device).unsqueeze(0)
+    elif k == 'image_masks':
+        processed_inputs[k] = v.to(torch.bfloat16).to(model.device).unsqueeze(0)
+    elif v.dtype in [torch.int32, torch.int64]:
+        processed_inputs[k] = v.to(model.device).unsqueeze(0)
+    else:
+        processed_inputs[k] = v.to(model.device).unsqueeze(0)
+print("\nTensor shapes and dtypes after processing:")
+for key, value in processed_inputs.items():
+    if torch.is_tensor(value):
+        print(f"{key}:")
+        print(f"  Shape: {value.shape}")
+        print(f"  Dtype: {value.dtype}")
+        if key == 'images':
+            print(f"  Range: [{value.min().item():.3f}, {value.max().item():.3f}]")
+output = model.generate_from_batch(
+    processed_inputs,
+    GenerationConfig(max_new_tokens=200, stop_strings="<|endoftext|>"),
+    tokenizer=processor.tokenizer
+)
+generated_tokens = output[0,processed_inputs['input_ids'].size(1):]
+generated_text = processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+print("\nGenerated text:", generated_text)
 
-
+"""
 from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
 from PIL import Image
 import requests
@@ -256,3 +256,4 @@ output = model.generate_from_batch(
 generated_tokens = output[0,processed_inputs['input_ids'].size(1):]
 generated_text = processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 print("\nGenerated text:", generated_text)
+"""

@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 import mimetypes
 from tqdm import tqdm
 import csv
-from pathlib import Path
 import re
 
 def generate_public_url(folder_name, base_url="https://olmo-checkpoints.org/ai2-llm/peteish7"):

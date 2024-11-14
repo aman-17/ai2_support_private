@@ -1,0 +1,23 @@
+version: v2
+budget: ai2/oe-training
+description: Unshard OLMO Checkpoint (step103000)
+tasks:
+  - name: unshard-checkpoint
+    image:
+      beaker: amanr/unsharding-peteish13B
+    command: [
+      "python", 
+      "-u", 
+      "scripts/unshard.py",
+      "/weka/oe-training-default/amanr/peteish13-highlrr/temp/step103000/",
+      "/weka/oe-training-default/amanr/peteish13-highlrr/",
+      "--safe-tensors",
+      "--type",
+      "olmo_core"
+    ]
+    context:
+      priority: normal
+    constraints:
+      cluster: [ai2/allennlp-elara-cirrascale]
+    env:
+      PYTHONUNBUFFERED: "1"  # For real-time logging

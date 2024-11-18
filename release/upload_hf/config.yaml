@@ -1,0 +1,20 @@
+version: v2
+budget: ai2/oe-training
+description: Upload peteish7b checkpoints to hf
+tasks:
+  - name: upload-peteish-hf
+    image:
+      beaker: ai2/cuda11.8-ubuntu20.04
+    command:
+      - /bin/bash
+      - -c
+      - /myfiles/amanr/transformers/upload_checkpoints_hf.sh
+    datasets:
+      - mountPath: /myfiles
+        source:
+          weka: oe-training-default
+    context:
+      preemptible: true
+    constraints:
+      cluster:
+        - ai2/allennlp-elara-cirrascale

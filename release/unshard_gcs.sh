@@ -56,7 +56,6 @@ CHECKPOINT_NUMBERS=($(get_checkpoint_numbers))
 TOTAL_CHECKPOINTS=${#CHECKPOINT_NUMBERS[@]}
 
 echo "Found $TOTAL_CHECKPOINTS checkpoints to process"
-echo "Will process in batches of $BATCH_SIZE, starting from lowest checkpoint number"
 
 for ((i = 0; i < ${#CHECKPOINT_NUMBERS[@]}; i += BATCH_SIZE)); do
     batch=("${CHECKPOINT_NUMBERS[@]:i:BATCH_SIZE}")

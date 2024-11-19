@@ -2,3 +2,5 @@ model-checkpoints/
 aws/
 vllm/
 vllm__ab/
+m_new.sh
+m.sh

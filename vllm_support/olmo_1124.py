@@ -21,14 +21,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Inference-only OLMo model compatible with HuggingFace weights."""
-"""Inference-only OLMo model compatible with HuggingFace weights."""
 from typing import Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from transformers import OlmoConfig
-from hf_olmo.configuration_olmo import OLMoConfig
-
+from transformers import Olmo1124Config
+from vllm import ModelRegistry,LLM, SamplingParams
 from vllm.attention import Attention, AttentionMetadata
 from vllm.config import CacheConfig
 from vllm.distributed import get_tensor_model_parallel_world_size
@@ -47,8 +45,7 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
 from vllm.model_executor.model_loader.weight_utils import default_weight_loader
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sequence import IntermediateTensors
-torch.multiprocessing.set_start_method('spawn')
-
+# torch.multiprocessing.set_start_method('spawn')
 
 class FlippedSiluAndMul(SiluAndMul):
     """OLMo is trained with SwiGLU with flipped halves."""
@@ -67,7 +64,7 @@ class OlmoAttention(nn.Module):
 
     def __init__(
         self,
-        config: OlmoConfig,
+        config: Olmo1124Config,
         cache_config: Optional[CacheConfig] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ):
@@ -84,20 +81,20 @@ class OlmoAttention(nn.Module):
         self.num_heads = (self.total_num_heads //
                           tensor_model_parallel_world_size)
         self.head_dim = self.hidden_size // self.total_num_heads
-        self.max_position_embeddings = config.max_position_embeddings
+        self.max_position_embeddings = config.max_sequence_length
         self.rope_theta = config.rope_theta
+        self.clip_qkv = config.clip_qkv
 
         # Attention input projection. Projects x -> (q, k, v)
         self.qkv_proj = QKVParallelLinear(
             self.hidden_size,
             self.head_dim,
             self.total_num_heads,
-            bias=config.attention_bias,
+            bias=config.include_bias,
             quant_config=quant_config,
         )
-
-        attention_layer_norm = True
-        if attention_layer_norm:
+        # attention_layer_norm = True
+        if config.attention_layer_norm:
             # TODO: finish adding qk norm and norm_after
             self.k_norm = RMSNorm(
                 (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads,
@@ -128,7 +125,7 @@ class OlmoAttention(nn.Module):
         self.o_proj = RowParallelLinear(
             self.hidden_size,
             self.hidden_size,
-            bias=config.attention_bias,
+            bias=config.include_bias,
             quant_config=quant_config,
         )
 
@@ -140,6 +137,8 @@ class OlmoAttention(nn.Module):
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
+        if self.clip_qkv is not None:
+            qkv.clamp_(min=-self.clip_qkv, max=self.clip_qkv)
         q, k, v = qkv.chunk(chunks=3, dim=-1)
         q = self.q_norm.forward_native(q)
         k = self.k_norm.forward_native(k)
@@ -160,7 +159,7 @@ class OlmoMLP(nn.Module):
 
     def __init__(
         self,
-        config: OlmoConfig,
+        config: Olmo1124Config,
         quant_config: Optional[QuantizationConfig] = None,
     ):
         super().__init__()
@@ -172,7 +171,7 @@ class OlmoMLP(nn.Module):
             if config.mlp_hidden_size is not None:
                 self.intermediate_size = config.mlp_hidden_size // 2
             else:
-                self.intermediate_size = (config.hidden_size * config.mlp_ratio) // 2
+                self.intermediate_size = (config.d_model * config.mlp_ratio) // 2
 
         # Feed-forward input projection.
         self.gate_up_proj = MergedColumnParallelLinear(
@@ -183,7 +182,7 @@ class OlmoMLP(nn.Module):
         )
 
         # Activation function.
-        self.act_fn = SiluAndMul()
+        self.act_fn = FlippedSiluAndMul()
 
         # Feed-forward output projection.
         self.down_proj = RowParallelLinear(
@@ -211,7 +210,7 @@ class OlmoDecoderLayer(nn.Module):
     """
 
     def __init__(self,
-                 config: OlmoConfig,
+                 config: Olmo1124Config,
                  cache_config: Optional[CacheConfig] = None,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
@@ -223,10 +222,10 @@ class OlmoDecoderLayer(nn.Module):
 
         # LayerNorm
 
-        self.norm_after = True
-        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm_after = config.norm_after
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         """
         self.input_layernorm = nn.LayerNorm(config.hidden_size,
@@ -271,13 +270,13 @@ class OlmoDecoderLayer(nn.Module):
 class OlmoModel(nn.Module):
 
     def __init__(self,
-                 config: Union[OlmoConfig, OLMoConfig],
+                 config: Olmo1124Config,
                  cache_config: Optional[CacheConfig] = None,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.config = config
 
-        self.embed_tokens = VocabParallelEmbedding(config.vocab_size,
+        self.embed_tokens = VocabParallelEmbedding(config.embedding_size,
                                                    config.hidden_size)
         self.layers = nn.ModuleList([
             OlmoDecoderLayer(config, cache_config, quant_config)
@@ -285,7 +284,7 @@ class OlmoModel(nn.Module):
         ])
         self.norm = RMSNorm(
             config.hidden_size,
-            eps=config.rms_norm_eps,
+            eps=config.layer_norm_eps,
             #elementwise_affine=config.layer_norm_with_affine,
             #bias=config.bias_for_layer_norm
         )
@@ -301,7 +300,7 @@ class OlmoModel(nn.Module):
         :param input_ids: A tensor of shape `(batch_size, seq_len)`.
         """
         # Get embeddings of input.
-        # shape: (batch_size, seq_len, hidden_size)
+        # shape: (batch_size, seq_len, d_model)
         inputs_embeds = self.embed_tokens(input_ids)
 
         # embed positions
@@ -309,7 +308,7 @@ class OlmoModel(nn.Module):
 
         # Apply blocks one-by-one.
         for layer_idx, decoder_layer in enumerate(self.layers):
-            # shape: (batch_size, seq_len, hidden_size)
+            # shape: (batch_size, seq_len, d_model)
             hidden_states = decoder_layer(
                 positions,
                 hidden_states,
@@ -318,36 +317,36 @@ class OlmoModel(nn.Module):
             )
 
         # Apply final layer norm.
-        # shape: (batch_size, seq_len or 1, hidden_size)
+        # shape: (batch_size, seq_len or 1, d_model)
         hidden_states = self.norm(hidden_states)
         return hidden_states
 
 
-class OlmoNewForCausalLM(nn.Module):
+class Olmo1124ForCausalLM(nn.Module):
     """
     Extremely barebones HF model wrapper.
     """
 
     def __init__(self,
-                 config: OlmoConfig,
+                 config: Olmo1124Config,
                  cache_config: Optional[CacheConfig] = None,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.config = config
         self.model = OlmoModel(config, cache_config, quant_config)
-        if config.tie_word_embeddings:
+        if config.weight_tying:
             self.lm_head = self.model.embed_tokens
         else:
             self.unpadded_vocab_size = config.vocab_size
             self.lm_head = ParallelLMHead(
                 #self.unpadded_vocab_size,
-                config.vocab_size,
+                config.embedding_size,
                 config.hidden_size,
-                org_num_embeddings=config.vocab_size,
+                org_num_embeddings=config.embedding_size,
                 #org_num_embeddings=config.vocab_size,
                 quant_config=quant_config,
             )
-        self.logits_processor = LogitsProcessor(config.vocab_size)
+        self.logits_processor = LogitsProcessor(config.embedding_size)
         self.sampler = Sampler()
 
     def forward(
@@ -382,15 +381,28 @@ class OlmoNewForCausalLM(nn.Module):
     ) -> Optional[SamplerOutput]:
         next_tokens = self.sampler(logits, sampling_metadata)
         return next_tokens
-    
-    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
+
+    def _create_map(self):
         mapper = {}
-        "loaded weights -> uninitialized model weights"
-        for layer_i in range(self.config.num_hidden_layers):
-            mapper[f"model.layers.{layer_i}.post_attention_layernorm.weight"] = f"model.layers.{layer_i}.input_layernorm.weight"
-            mapper[f"model.layers.{layer_i}.post_feedforward_layernorm.weight"] = f"model.layers.{layer_i}.post_attention_layernorm.weight"
-        # from rich.pretty import pprint
-        # pprint(mapper)
+        for layer_i in range(self.config.n_layers):
+            mapper[f"model.transformer.blocks.{layer_i}.att_proj.weight"] = f"model.layers.{layer_i}.self_attn.qkv_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.attn_out.weight"] = f"model.layers.{layer_i}.self_attn.o_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_proj.weight"] = f"model.layers.{layer_i}.mlp.gate_up_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_out.weight"] = f"model.layers.{layer_i}.mlp.down_proj.weight"
+
+            mapper[f"model.transformer.blocks.{layer_i}.attn_norm.weight"] = f"model.layers.{layer_i}.input_layernorm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_norm.weight"] = f"model.layers.{layer_i}.post_attention_layernorm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.k_norm.weight"] = f"model.layers.{layer_i}.self_attn.k_norm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.q_norm.weight"] = f"model.layers.{layer_i}.self_attn.q_norm.weight"
+
+        mapper["model.transformer.ln_f.weight"] = "model.norm.weight"
+        mapper["model.transformer.wte.weight"] = "model.embed_tokens.weight"
+        mapper["model.transformer.ff_out.weight"] = "lm_head.weight"
+        return mapper
+
+    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
+        mapper = self._create_map()
+        print("mapper", mapper)
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)
             ("qkv_proj", "q_proj", "q"),
@@ -399,6 +411,7 @@ class OlmoNewForCausalLM(nn.Module):
             ("gate_up_proj", "gate_proj", 0),
             ("gate_up_proj", "up_proj", 1),
         ]
+
         params_dict = dict(self.named_parameters(remove_duplicate=False))
         for name, loaded_weight in weights:
             if "rotary_emb.inv_freq" in name:
@@ -411,7 +424,7 @@ class OlmoNewForCausalLM(nn.Module):
             # With tie_word_embeddings, we can skip lm_head.weight
             # The weight might appear unnecessarily in the files if the model is
             # processed with quantization, LoRA, fine-tuning, etc.
-            if self.config.tie_word_embeddings and "lm_head.weight" in name:
+            if self.config.weight_tying and "lm_head.weight" in name:
                 continue
             for (param_name, weight_name, shard_id) in stacked_params_mapping:
                 if weight_name not in name:
@@ -423,7 +436,6 @@ class OlmoNewForCausalLM(nn.Module):
                 param = params_dict[name]
                 weight_loader = param.weight_loader
                 weight_loader(param, loaded_weight, shard_id)
-                # print("loaded", name, param)
                 break
             else:
                 # Skip loading extra bias for GPTQ models.
@@ -434,51 +446,23 @@ class OlmoNewForCausalLM(nn.Module):
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
 
-if __name__ == "__main__":
-    # here we just register the new model class
-    # need to run `pip install git+https://github.com/vwxyzjn/transformers.git@olmo1124_classification`
-    from vllm.model_executor.models import ModelRegistry
-    ModelRegistry.register_model("Olmo1124ForCausalLM", OlmoNewForCausalLM)
-    from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-    from vllm import LLM, SamplingParams
-    config = AutoConfig.from_pretrained(
-        "allenai/open_instruct_dev",
-        revision="olmo1124_finetune2__allenai_open_instruct_dev__42__1731388853",
-    )
-    model = AutoModelForCausalLM.from_pretrained(
-        "allenai/open_instruct_dev",
-        revision="olmo1124_finetune2__allenai_open_instruct_dev__42__1731388853",
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True,
-    )
-    model = model.cuda()
-    tokenizer = AutoTokenizer.from_pretrained(
-        "allenai/open_instruct_dev",
-        revision="olmo1124_finetune2__allenai_open_instruct_dev__42__1731388853",
-    )
-    conv = [
-        {"role": "user", "content": "How are you doing?"},
-    ]
-    token = tokenizer.apply_chat_template(conv, add_generation_prompt=True)
 
-    tokens = torch.tensor([token]).cuda()
-    with torch.no_grad():
-        outputs = model.generate(input_ids=tokens, max_length=100, temperature=0.0)
-    print(tokenizer.decode(outputs[0]))
-    del model
-    torch.cuda.empty_cache()
-    
-    s = SamplingParams(temperature=0.0, max_tokens=100)
+if __name__ == "__main__":
+    ModelRegistry.register_model("OlmoForCausalLM", Olmo1124ForCausalLM)
+
+    checkpoint_path = "model-checkpoints/peteish7/step11931-unsharded-hf/"
+
+    sampling_params = SamplingParams(temperature=0.0)
     llm = LLM(
-        model="allenai/open_instruct_dev",
-        revision="olmo1124_finetune2__allenai_open_instruct_dev__42__1731388853",
-        tokenizer_revision="olmo1124_finetune2__allenai_open_instruct_dev__42__1731388853",
-        gpu_memory_utilization=0.90,
-        enforce_eager=True,
-        tensor_parallel_size=2,
+        model="shanearora/OLMo-7B-1124-hf",
+        trust_remote_code=True,
+        gpu_memory_utilization=0.90
     )
-    outputs = llm.generate(prompt_token_ids=[token], sampling_params=s)
-    for output in outputs:
-        prompt = output.prompt
-        generated_text = output.outputs[0].text
-        print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+    prompt = "San Francisco is a"
+    outputs = llm.generate([prompt], sampling_params=sampling_params)
+    generated_text = outputs[0].outputs[0].text
+    print(f"Generated: {generated_text}")
+
+    import torch.distributed as dist
+    if dist.is_initialized():
+        dist.destroy_process_group()

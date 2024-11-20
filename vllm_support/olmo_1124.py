@@ -244,24 +244,19 @@ class OlmoDecoderLayer(nn.Module):
 
 
 class OlmoModel(nn.Module):
-    """Base OLMo model implementation following vLLM design principles"""
-    
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
         super().__init__()
         
-        # Extract specific configs from the unified VllmConfig
         self.config = vllm_config.model_config.hf_config
         self.cache_config = vllm_config.cache_config
         self.quant_config = vllm_config.quant_config
         self.prefix = prefix
         
-        # Initialize embedding layer
         self.embed_tokens = VocabParallelEmbedding(
             self.config.embedding_size,
             self.config.hidden_size
         )
         
-        # Initialize transformer layers
         self.layers = nn.ModuleList([
             OlmoDecoderLayer(
                 vllm_config=vllm_config,
@@ -270,7 +265,6 @@ class OlmoModel(nn.Module):
             for layer_idx in range(self.config.num_hidden_layers)
         ])
         
-        # Initialize final normalization
         self.norm = RMSNorm(
             self.config.hidden_size,
             eps=self.config.layer_norm_eps
@@ -283,16 +277,8 @@ class OlmoModel(nn.Module):
         kv_caches: List[torch.Tensor],
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
-        """Forward pass of the model.
-        
-        Args:
-            input_ids: A tensor of shape (batch_size, seq_len).
-            positions: Position IDs for the input sequence.
-            kv_caches: List of key-value caches for each layer.
-            attn_metadata: Metadata for attention computation.
-            
-        Returns:
-            torch.Tensor: The final hidden states.
+        """
+        :param input_ids: A tensor of shape `(batch_size, seq_len)`.
         """
         # Get embeddings of input
         # shape: (batch_size, seq_len, d_model)
@@ -326,9 +312,8 @@ class Olmo1124ForCausalLM(nn.Module):
         self.lora_config = vllm_config.lora_config
         
         self.model = OlmoModel(
-            config=self.config,
-            cache_config=self.cache_config,
-            quant_config=self.quant_config
+            vllm_config=self.config,
+            prefix=prefix
         )
         
         if self.config.weight_tying:
@@ -360,21 +345,84 @@ class Olmo1124ForCausalLM(nn.Module):
             attn_metadata=attn_metadata,
         )
         return hidden_states
-    
 
-if __name__ == "__main__":
-    ModelRegistry.register_model("Olmo1124ForCausalLM", Olmo1124ForCausalLM)
-    sampling_params = SamplingParams(temperature=0.0)
-    llm = LLM(
-        model="shanearora/OLMo-7B-1124-hf",
-        trust_remote_code=True,
-        gpu_memory_utilization=0.90
-    )
-    prompt = "San Francisco is a"
-    outputs = llm.generate([prompt], sampling_params=sampling_params)
-    generated_text = outputs[0].outputs[0].text
-    print(f"Generated: {generated_text}")
+    def compute_logits(
+        self,
+        hidden_states: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> Optional[torch.Tensor]:
+        logits = self.logits_processor(self.lm_head, hidden_states,
+                                       sampling_metadata)
+        return logits
 
-    import torch.distributed as dist
-    if dist.is_initialized():
-        dist.destroy_process_group()
+    def sample(
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> Optional[SamplerOutput]:
+        next_tokens = self.sampler(logits, sampling_metadata)
+        return next_tokens
+
+    def _create_map(self):
+        mapper = {}
+        for layer_i in range(self.config.n_layers):
+            mapper[f"model.transformer.blocks.{layer_i}.att_proj.weight"] = f"model.layers.{layer_i}.self_attn.qkv_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.attn_out.weight"] = f"model.layers.{layer_i}.self_attn.o_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_proj.weight"] = f"model.layers.{layer_i}.mlp.gate_up_proj.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_out.weight"] = f"model.layers.{layer_i}.mlp.down_proj.weight"
+
+            mapper[f"model.transformer.blocks.{layer_i}.attn_norm.weight"] = f"model.layers.{layer_i}.input_layernorm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.ff_norm.weight"] = f"model.layers.{layer_i}.post_attention_layernorm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.k_norm.weight"] = f"model.layers.{layer_i}.self_attn.k_norm.weight"
+            mapper[f"model.transformer.blocks.{layer_i}.q_norm.weight"] = f"model.layers.{layer_i}.self_attn.q_norm.weight"
+
+        mapper["model.transformer.ln_f.weight"] = "model.norm.weight"
+        mapper["model.transformer.wte.weight"] = "model.embed_tokens.weight"
+        mapper["model.transformer.ff_out.weight"] = "lm_head.weight"
+        return mapper
+
+    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
+        mapper = self._create_map()
+        print("mapper", mapper)
+        stacked_params_mapping = [
+            # (param_name, shard_name, shard_id)
+            ("qkv_proj", "q_proj", "q"),
+            ("qkv_proj", "k_proj", "k"),
+            ("qkv_proj", "v_proj", "v"),
+            ("gate_up_proj", "gate_proj", 0),
+            ("gate_up_proj", "up_proj", 1),
+        ]
+
+        params_dict = dict(self.named_parameters(remove_duplicate=False))
+        for name, loaded_weight in weights:
+            if "rotary_emb.inv_freq" in name:
+                continue
+            if ("rotary_emb.cos_cached" in name
+                    or "rotary_emb.sin_cached" in name):
+                # Models trained using ColossalAI may include these tensors in
+                # the checkpoint. Skip them.
+                continue
+            # With tie_word_embeddings, we can skip lm_head.weight
+            # The weight might appear unnecessarily in the files if the model is
+            # processed with quantization, LoRA, fine-tuning, etc.
+            if self.config.weight_tying and "lm_head.weight" in name:
+                continue
+            for (param_name, weight_name, shard_id) in stacked_params_mapping:
+                if weight_name not in name:
+                    continue
+                name = name.replace(weight_name, param_name)
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                param = params_dict[name]
+                weight_loader = param.weight_loader
+                weight_loader(param, loaded_weight, shard_id)
+                break
+            else:
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                param = params_dict[mapper.get(name, name)]
+                weight_loader = getattr(param, "weight_loader",
+                                        default_weight_loader)
+                weight_loader(param, loaded_weight)

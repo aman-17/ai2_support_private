@@ -1,5 +1,0 @@
-2024-10-31 20:38:41.208	allennlp-cs-aus-273.reviz.ai2.in:0	__main__:948	INFO	Starting unsharding checkpoints of run directory or archive /weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7/
-2024-10-31 20:38:41.266	allennlp-cs-aus-273.reviz.ai2.in:0	__main__:820	INFO	Found 1 sharded checkpoint directories for /weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7/
-2024-10-31 20:38:41.266	allennlp-cs-aus-273.reviz.ai2.in:0	__main__:966	INFO	Unsharded directory already exists for step187000 at source /weka/oe-training-default/ai2-llm/checkpoints/OLMo-medium/peteish7/step187000-unsharded, skipping
-2024-10-31 20:38:41.266	allennlp-cs-aus-273.reviz.ai2.in:0	__main__:1370	INFO	Operation completed successfully!
-2024-10-31 20:38:41.266	allennlp-cs-aus-273.reviz.ai2.in:0	__main__:1373	INFO	Deleting temp dir /tmp/tmpjpjlh800

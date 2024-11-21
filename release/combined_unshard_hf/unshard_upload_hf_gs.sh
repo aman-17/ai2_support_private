@@ -26,7 +26,7 @@ fi
 
 export GOOGLE_APPLICATION_CREDENTIALS="$SERVICE_ACCOUNT_JSON"
 gcloud auth activate-service-account --key-file="$SERVICE_ACCOUNT_JSON"
-export HUGGING_FACE_HUB_TOKEN="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"
+export HUGGING_FACE_HUB_TOKEN="HF_TOKEN"
 huggingface-cli login --token $HUGGING_FACE_HUB_TOKEN
 
 checkpoints=($(gsutil ls "$GCS_CHECKPOINT_DIR" | \

@@ -1,0 +1,28 @@
+version: v2
+budget: ai2/oe-training
+description: Unshard upload peteish13b checkpoints to hf
+retry:
+  allowedTaskRetries: 3
+tasks:
+  - name: unshard-upload-peteish13-hf
+    image:
+      beaker: ai2/cuda11.8-ubuntu20.04
+    command:
+      - /bin/bash
+      - /new_mount_path/unshard_upload_hf_gs_augusta.sh
+      - 160000
+    datasets:
+      - mountPath: /new_mount_path_1/service_account.json
+        source:
+          secret: gcp-secret
+      - mountPath: /new_mount_path/
+        source:
+          beaker: amanr/01
+      - mountPath: /data/
+        source:
+          hostPath: /data/
+    context:
+      preemptible: true
+    constraints:
+      cluster:
+        - ai2/augusta-google-1

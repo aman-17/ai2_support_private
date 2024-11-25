@@ -16,6 +16,7 @@ def update_config(token, repo_id, branch):
         revision=branch,
         local_dir=temp_dir
     )
+    
     with open(config_path, "r") as f:
         config = json.load(f)
     
@@ -32,6 +33,7 @@ def update_config(token, repo_id, branch):
         revision=branch,
         commit_message="Update model architecture to Olmo2"
     )
+    
     shutil.rmtree(temp_dir)
 
 def update_all_branches(token, repo_id):
@@ -48,5 +50,5 @@ def update_all_branches(token, repo_id):
 
 if __name__ == "__main__":
     HF_TOKEN = "HF_TOKEN"
-    REPO_ID = "allenai/olmo-peteish7"
+    REPO_ID = "allenai/OLMo2-7B-1124"
     update_all_branches(HF_TOKEN, REPO_ID)

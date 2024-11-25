@@ -1,7 +1,7 @@
 from huggingface_hub import HfApi
 import json
-import os
 import shutil
+import os
 
 def update_config(token, repo_id, branch):
     api = HfApi(token=token)
@@ -16,7 +16,6 @@ def update_config(token, repo_id, branch):
         revision=branch,
         local_dir=temp_dir
     )
-    
     with open(config_path, "r") as f:
         config = json.load(f)
     
@@ -33,22 +32,21 @@ def update_config(token, repo_id, branch):
         revision=branch,
         commit_message="Update model architecture to Olmo2"
     )
-    
     shutil.rmtree(temp_dir)
 
 def update_all_branches(token, repo_id):
-    branches = [
-        "main", "step1000-tokens5B"]#, "step10000-tokens42B", "step101000-tokens424B"]
-
+    api = HfApi(token=token)
+    refs = api.list_repo_refs(repo_id)
+    branches = [branch_ref.name for branch_ref in refs.branches]
     
     for branch in branches:
         try:
             update_config(token, repo_id, branch)
-            print(f"Updated {branch}")
+            print(f"✓ Updated {branch}")
         except Exception as e:
-            print(f"Error updating {branch}: {e}")
+            print(f"✗ Error updating {branch}: {e}")
 
 if __name__ == "__main__":
-    HF_TOKEN = "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"
+    HF_TOKEN = "HF_TOKEN"
     REPO_ID = "allenai/olmo-peteish7"
     update_all_branches(HF_TOKEN, REPO_ID)

@@ -44,9 +44,9 @@ def update_all_branches(token, repo_id):
     for branch in branches:
         try:
             update_config(token, repo_id, branch)
-            print(f"✓ Updated {branch}")
+            print(f"Updated {branch}")
         except Exception as e:
-            print(f"✗ Error updating {branch}: {e}")
+            print(f"Error updating {branch}: {e}")
 
 if __name__ == "__main__":
     HF_TOKEN = "HF_TOKEN"

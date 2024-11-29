@@ -1,0 +1,20 @@
+version: v2
+budget: ai2/oe-training
+description: upload peteish7b checkpoints to r2
+tasks:
+  - name: upload-peteish-checkpoints-r2
+    image:
+      beaker: ai2/cuda11.8-ubuntu20.04
+    command:
+      - /bin/bash
+      - -c
+      - /myfiles/amanr/ai2_support_private/release/upload_r2/upload_unshardedFiles_r2.sh
+    datasets:
+      - mountPath: /myfiles
+        source:
+          weka: oe-training-default
+    context:
+      preemptible: true
+    constraints:
+      cluster:
+        - ai2/allennlp-elara-cirrascale

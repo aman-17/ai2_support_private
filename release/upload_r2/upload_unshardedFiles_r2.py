@@ -105,7 +105,7 @@ if __name__ == "__main__":
         'access_key_id': 'ef89def20063915f4af13cf05c623710',
         'secret_access_key': '29685c748bd73b31f91cc904885b6294cf598c50164f169cb8e05ab6fbfd4e4d',
         'bucket_name': 'olmo-checkpoints',
-        'root_path': './'
+        'root_path': '/myfiles/amanr/safetens_unshard'
     }
     
     upload_unsharded_folders(

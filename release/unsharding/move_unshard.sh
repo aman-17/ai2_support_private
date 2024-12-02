@@ -1,11 +1,11 @@
 #!/bin/bash
 
 SOURCE_DIR="/data/input/ai2-llm/checkpoints/OLMo-medium/peteish7"
-DEST_DIR="/data/input/amanr/safetens_unshard"
+DEST_DIR="/data/input/amanr/safetens_unshard2"
 
 mkdir -p "$DEST_DIR"
 
-steps=($(ls "$SOURCE_DIR" | grep -Eo 'step[0-9]+-unsharded' | grep -Eo '[0-9]+' | sort -n | awk '$1 >= 0 && $1 <= 248000'))
+steps=($(ls "$SOURCE_DIR" | grep -Eo 'step[0-9]+-unsharded' | grep -Eo '[0-9]+' | sort -n | awk '$1 >= 248000 && $1 <= 2480000'))
 total=${#steps[@]}
 
 echo "Found $total unsharded checkpoints to move"

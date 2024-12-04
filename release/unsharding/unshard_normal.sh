@@ -3,10 +3,10 @@
 pip install ai2-olmo datasets wandb
 
 OLMO_DIR="/myfiles/amanr/OLMo"
-LOCAL_CHECKPOINT_DIR="/myfiles/ai2-llm/checkpoints/OLMo-medium/peteish7"
-DEST_DIR="/myfiles/amanr/remaining_checkpoints"
-LOGS_DIR="/myfiles/amanr/logs_remaining_checkpoints"
-TEMP_DIR="/myfiles/ai2-llm/amanr"
+LOCAL_CHECKPOINT_DIR="/myfiles/amanr/stage2_olmo7b"
+DEST_DIR="/myfiles/amanr/unsharded_stage2_olmo7b"
+LOGS_DIR="/myfiles/amanr/logs_unsharded_stage2_olmo7b"
+TEMP_DIR="/myfiles/ai2-llm/amanr/temp_unsharded_stage2_olmo7b"
 BATCH_SIZE=4
 
 mkdir -p "$LOGS_DIR"

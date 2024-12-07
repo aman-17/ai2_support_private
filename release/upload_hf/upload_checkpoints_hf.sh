@@ -4,7 +4,7 @@ pip install torch
 pip install -e /myfiles/amanr/transformers/
 pip install 'accelerate>=0.26.0'
 pip install hf_transfer
-export HUGGING_FACE_HUB_TOKEN="ENTER_HF_TOKEN"
+export HUGGING_FACE_HUB_TOKEN="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"
 huggingface-cli login --token $HUGGING_FACE_HUB_TOKEN
 
 BASE_DIR="/myfiles/ai2-llm/checkpoints/OLMo-medium/peteish7"
@@ -24,7 +24,7 @@ for checkpoint in $(ls -d ${BASE_DIR}/step*-unsharded | sort -V); do
         OUTPUT_DIR="${OUTPUT_BASE}/step${step}-hf"
         mkdir -p "$OUTPUT_DIR"
 
-        revision="step${step}-tokens${tokens_b}B"
+        revision="stage-2-step${step}-tokens${tokens_b}B"
 
         echo "Processing step ${step}, total tokens: ${tokens_b}B"
 

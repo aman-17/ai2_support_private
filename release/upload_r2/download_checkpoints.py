@@ -7,7 +7,6 @@ from tqdm import tqdm
 from urllib.parse import urljoin
 
 def download_file(url, save_path, chunk_size=8192):
-    """Download a file with progress bar."""
     response = requests.get(url, stream=True)
     response.raise_for_status()
     total_size = int(response.headers.get('content-length', 0))
@@ -23,8 +22,6 @@ def download_file(url, save_path, chunk_size=8192):
 def try_get_directory_listing(url):
    common_files = [
        "config.yaml",
-    #    "model.pt", 
-    #    "optim.pt",
        "train.pt",
        "model.safetensors",
        "optim.safetensors",
@@ -47,14 +44,13 @@ def try_get_directory_listing(url):
    return found_files
 
 def download_checkpoint(url, save_dir):
-   """Download all files from a checkpoint directory."""
    base_path = Path(save_dir)
    base_path.mkdir(parents=True, exist_ok=True)
    print(f"Saving to: {base_path}")
    available_files = try_get_directory_listing(url)
    
    if not available_files:
-       raise ValueError("No matching files found in directory")
+       raise ValueError("Matching files not found in directory")
    
    failed_files = []
    for file in available_files:
@@ -64,7 +60,7 @@ def download_checkpoint(url, save_dir):
            print(f"\nDownloading: {file}")
            download_file(file_url, file_path)
        except requests.exceptions.Timeout:
-           print(f"Timeout error for {file}, retrying once...")
+           print(f"Timeout error for {file}, retryin...")
            try:
                download_file(file_url, file_path)
            except requests.exceptions.RequestException as e:
@@ -74,7 +70,7 @@ def download_checkpoint(url, save_dir):
            failed_files.append(file)
            print(f"Failed to download {file}: {e}")
    if failed_files:
-       print(f"\nWARNING: Failed to download these files: {failed_files}")
+       print(f"\nFAILED to download these files: {failed_files}")
 
 def main():
     parser = argparse.ArgumentParser(description='Download OLMo checkpoints')
@@ -108,7 +104,7 @@ def main():
         urls = [(step, url) for step, url in urls if step == args.step]
         if not urls:
             print(f"Error: Step {args.step} not found in the CSV file.")
-            print("Use list argument to see available step numbers.")
+            print("Use list argument to see available checkpoint steps.")
             return
     
     print(f"Saving checkpoints to: {args.save_dir}")
